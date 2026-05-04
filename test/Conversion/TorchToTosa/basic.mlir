@@ -2746,6 +2746,26 @@ func.func @torch.aten.diag_embed$basic(%arg0: !torch.vtensor<[2,3,4],f32>) -> !t
 
 // -----
 
+// CHECK-LABEL:   func.func @torch.aten.index_put_hacked_twin_flattened_updates(
+// CHECK:           %[[SCATTER:.*]] = tosa.scatter
+// CHECK-SAME:        (tensor<1x6x1xf32>, tensor<1x6xi32>, tensor<1x6x1xf32>) -> tensor<1x6x1xf32>
+// CHECK:           %[[RESHAPE:.*]] = tosa.reshape %[[SCATTER]]
+// CHECK-SAME:        (tensor<1x6x1xf32>, !tosa.shape<3>) -> tensor<1x2x3xf32>
+// CHECK:           torch_c.from_builtin_tensor %[[RESHAPE]] : tensor<1x2x3xf32> -> !torch.vtensor<[1,2,3],f32>
+func.func @torch.aten.index_put_hacked_twin_flattened_updates(
+    %arg0: !torch.vtensor<[1,2,3],f32>,
+    %arg1: !torch.vtensor<[6],si64>,
+    %arg2: !torch.vtensor<[6],si64>,
+    %arg3: !torch.vtensor<[6],si64>,
+    %arg4: !torch.vtensor<[6],f32>) -> !torch.vtensor<[1,2,3],f32> {
+  %indices = torch.prim.ListConstruct %arg1, %arg2, %arg3 : (!torch.vtensor<[6],si64>, !torch.vtensor<[6],si64>, !torch.vtensor<[6],si64>) -> !torch.list<vtensor>
+  %false = torch.constant.bool false
+  %0 = torch.aten.index_put.hacked_twin %arg0, %indices, %arg4, %false : !torch.vtensor<[1,2,3],f32>, !torch.list<vtensor>, !torch.vtensor<[6],f32>, !torch.bool -> !torch.vtensor<[1,2,3],f32>
+  return %0 : !torch.vtensor<[1,2,3],f32>
+}
+
+// -----
+
 // CHECK-LABEL:   func.func @torch.aten.index.Tensor_hacked_twin(
 // CHECK-SAME:                                                   %[[VAL_0:.*]]: !torch.vtensor<[2,4,2],si64>,
 // CHECK-SAME:                                                   %[[VAL_1:.*]]: !torch.vtensor<[],si64>) -> !torch.vtensor<[4,2],si64> {
