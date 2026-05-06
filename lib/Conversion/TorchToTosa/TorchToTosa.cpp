@@ -6005,6 +6005,9 @@ LogicalResult ConvertAtenOp<AtenClampOp>::matchAndRewriteImpl(
   auto outType =
       dyn_cast<TensorType>(getTypeConverter()->convertType(op.getType()));
   auto outElemTy = outType.getElementType();
+  Value self = adaptor.getSelf();
+  if (selfType != outType)
+    self = tosa::CastOp::create(rewriter, op.getLoc(), outType, self);
 
   std::optional<int64_t> minInt;
   std::optional<double> minFloat;
@@ -6048,7 +6051,7 @@ LogicalResult ConvertAtenOp<AtenClampOp>::matchAndRewriteImpl(
     }
 
     rewriter.replaceOpWithNewOp<tosa::ClampOp>(
-        op, outType, adaptor.getSelf(), minIntAttr, maxIntAttr,
+        op, outType, self, minIntAttr, maxIntAttr,
         /*nan_mode=*/
         tosa::NanPropagationModeAttr::get(rewriter.getContext(),
                                           tosa::NanPropagationMode::PROPAGATE));
@@ -6061,7 +6064,7 @@ LogicalResult ConvertAtenOp<AtenClampOp>::matchAndRewriteImpl(
     }
 
     rewriter.replaceOpWithNewOp<tosa::ClampOp>(
-        op, outType, adaptor.getSelf(), minFloatAttr, maxFloatAttr,
+        op, outType, self, minFloatAttr, maxFloatAttr,
         /*nan_mode=*/
         tosa::NanPropagationModeAttr::get(rewriter.getContext(),
                                           tosa::NanPropagationMode::PROPAGATE));
