@@ -3444,6 +3444,7 @@ ONNX_XFAIL_SET = {
     "ElementwiseAcosIntModule_basic",
     "ElementwiseAsinIntModule_basic",
     "ElementwiseAtanTensorIntModule_basic",
+    "ElementwiseAtanTensorBFloat16SpecialValuesModule_basic",
     "ElementwiseCosIntModule_basic",
     "ElementwiseDivTensorRoundingModeTruncModule_basic",
     "ElementwiseDivTensorRoundingModeTruncStaticModule_basic",
