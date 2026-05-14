@@ -6006,8 +6006,12 @@ LogicalResult ConvertAtenOp<AtenClampOp>::matchAndRewriteImpl(
       dyn_cast<TensorType>(getTypeConverter()->convertType(op.getType()));
   auto outElemTy = outType.getElementType();
   Value self = adaptor.getSelf();
-  if (selfType != outType)
-    self = tosa::CastOp::create(rewriter, op.getLoc(), outType, self);
+  if (selfType != outType) {
+    auto castedSelf = tosa::tosaCastTensorToType(rewriter, self, outType);
+    if (!castedSelf)
+      return rewriter.notifyMatchFailure(op, "failed to cast self");
+    self = *castedSelf;
+  }
 
   std::optional<int64_t> minInt;
   std::optional<double> minFloat;
