@@ -553,7 +553,13 @@ std::optional<Value> convertScatterNdOp(PatternRewriter &rewriter,
   // input(chould be scatter) C = product(params.shape[ND:] ND = 2, paramsRank,
   // C = 1
   for (int i = ND; i < paramsRank; i++) {
-    C *= paramsType.getShape()[i];
+    int64_t dim = paramsType.getShape()[i];
+    if (dim < 0) {
+      (void)rewriter.notifyMatchFailure(
+          op, "scatter channel dimensions must be static");
+      return std::nullopt;
+    }
+    C *= dim;
   }
 
   // int N = 1, W = 3, K = 4, fillk = 3, C = 1, ND = 2;
@@ -569,18 +575,17 @@ std::optional<Value> convertScatterNdOp(PatternRewriter &rewriter,
   // 2. !torch.vtensor<[],si64>
   //    reshape(1) tile(3)  reshape(1,3)   reshape(1,3,1)
   //  [] -> [0] -> [0,0,0] -> [[0,0,0]] -> [[[0], [0], [0]]]
-  //    reshape to [1] and then tile to same number of indicesValue.shape[0],
-  //    [1,1,1]
+  //    reshape to [1] and then tile to W * C update values.
   if (fillValuesType.getRank() == 0) {
     // [] -> [0]
-    SmallVector<int64_t, 1> oneShape({1}); // {3,1}
+    SmallVector<int64_t, 1> oneShape({1}); // {1}
     auto tosaFillValuesOneReshapeOp = tosa::CreateOpAndInfer<tosa::ReshapeOp>(
         rewriter, op->getLoc(),
         GetTypeFromTensorShape(oneShape, fillValuesType.getElementType()),
         fillValues, tosa::getTosaConstShape(rewriter, op->getLoc(), oneShape));
 
     // [0] -> [0,0,0]
-    SmallVector<int64_t, 1> tileShape({W}); // {3}
+    SmallVector<int64_t, 1> tileShape({W * C}); // {3}
     auto tileOpMultiples =
         tosa::getTosaConstShape(rewriter, op->getLoc(), tileShape);
     auto tosaFillValuesTileOp = tosa::CreateOpAndInfer<tosa::TileOp>(
@@ -589,7 +594,7 @@ std::optional<Value> convertScatterNdOp(PatternRewriter &rewriter,
         tosaFillValuesOneReshapeOp.getResult(), tileOpMultiples);
 
     // [0,0,0] -> [[0,0,0]]
-    SmallVector<int64_t, 2> newTosaFillValuesShape({N, W}); // {1,3}
+    SmallVector<int64_t, 2> newTosaFillValuesShape({N, W * C}); // {1,3}
     auto newTosaFillValuesReshapeOp = tosa::CreateOpAndInfer<tosa::ReshapeOp>(
         rewriter, op->getLoc(),
         GetTypeFromTensorShape(newTosaFillValuesShape,
@@ -601,16 +606,34 @@ std::optional<Value> convertScatterNdOp(PatternRewriter &rewriter,
     fillValuesType = dyn_cast<RankedTensorType>(fillValues.getType());
   }
 
-  // fillK: range of each index, total number of fillInput(could be scatter)
-  // after flattened k = 1*1*3 = 3
+  // TOSA scatter update values are shaped [N, W, C], where W is the
+  // number of flattened scatter indices.  fillK validates that fillValues
+  // contains exactly one C-sized update for each flattened index.
   int64_t fillNumElements = 1;
   for (int64_t dim : fillValuesType.getShape()) {
     fillNumElements *= dim;
   }
-  if (fillNumElements % C != 0)
-    return std::nullopt;
-  fillK = fillNumElements / C;
-  SmallVector<int64_t, 3> tosaFillValuesShape({N, fillK, C}); // {1,3,1}
+  if (C == 0) {
+    if (fillNumElements != 0) {
+      (void)rewriter.notifyMatchFailure(
+          op, "zero-channel scatter update must have zero elements");
+      return std::nullopt;
+    }
+    fillK = W;
+  } else {
+    if (fillNumElements % C != 0) {
+      (void)rewriter.notifyMatchFailure(
+          op, "scatter update element count must be divisible by channels");
+      return std::nullopt;
+    }
+    fillK = fillNumElements / C;
+    if (fillK != W) {
+      (void)rewriter.notifyMatchFailure(
+          op, "scatter update count must match flattened indices");
+      return std::nullopt;
+    }
+  }
+  SmallVector<int64_t, 3> tosaFillValuesShape({N, W, C}); // {1,3,1}
 
   // Reshape/Flatten fillValues to 3d tensor
   // [[0,0,0]] -> [[[0], [0], [0]]]
