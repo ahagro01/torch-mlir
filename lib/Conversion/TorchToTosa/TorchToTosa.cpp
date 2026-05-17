@@ -6001,9 +6001,17 @@ LogicalResult ConvertAtenOp<AtenClampOp>::matchAndRewriteImpl(
   if (!selfType)
     return rewriter.notifyMatchFailure(
         op, "only tensor types input are currently supported");
+  auto selfTorchType = dyn_cast<Torch::BaseTensorType>(op.getSelf().getType());
+  if (selfTorchType && selfTorchType.getDtype().isUnsignedInteger()) {
+    return rewriter.notifyMatchFailure(
+        op, "unsigned integer clamp is not currently supported");
+  }
 
   auto outType =
       dyn_cast<TensorType>(getTypeConverter()->convertType(op.getType()));
+  if (!outType)
+    return rewriter.notifyMatchFailure(
+        op, "only tensor types output are currently supported");
   auto outElemTy = outType.getElementType();
   Value self = adaptor.getSelf();
   if (selfType != outType) {
