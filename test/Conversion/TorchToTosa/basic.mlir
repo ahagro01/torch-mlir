@@ -2658,6 +2658,27 @@ func.func @torch.aten.scatter.src$basic(%arg0: !torch.vtensor<[10,8,6],f32>, %ar
 
 // -----
 
+// CHECK-LABEL:   func.func @torch.aten.index_put.hacked_twin$c_gt_1_update(
+// CHECK-SAME:                                                               %[[VAL_0:.*]]: !torch.vtensor<[4,4],f32>,
+// CHECK-SAME:                                                               %[[VAL_1:.*]]: !torch.vtensor<[2],si64>,
+// CHECK-SAME:                                                               %[[VAL_2:.*]]: !torch.vtensor<[2,4],f32>) -> !torch.vtensor<[4,4],f32> {
+// CHECK:           %[[UPDATES_BUILTIN:.*]] = torch_c.to_builtin_tensor %[[VAL_2]] : !torch.vtensor<[2,4],f32> -> tensor<2x4xf32>
+// CHECK:           %[[INPUT_BUILTIN:.*]] = torch_c.to_builtin_tensor %[[VAL_0]] : !torch.vtensor<[4,4],f32> -> tensor<4x4xf32>
+// CHECK:           %[[INDEX_BUILTIN:.*]] = torch_c.to_builtin_tensor %[[VAL_1]] : !torch.vtensor<[2],si64> -> tensor<2xi64>
+// CHECK:           %[[UPDATES_SHAPE:.*]] = tosa.const_shape  {values = dense<[1, 2, 4]> : tensor<3xindex>} : () -> !tosa.shape<3>
+// CHECK:           %[[UPDATES:.*]] = tosa.reshape %[[UPDATES_BUILTIN]], %[[UPDATES_SHAPE]] : (tensor<2x4xf32>, !tosa.shape<3>) -> tensor<1x2x4xf32>
+// CHECK:           %[[INPUT_SHAPE:.*]] = tosa.const_shape  {values = dense<[1, 4, 4]> : tensor<3xindex>} : () -> !tosa.shape<3>
+// CHECK:           %[[INPUT:.*]] = tosa.reshape %[[INPUT_BUILTIN]], %[[INPUT_SHAPE]] : (tensor<4x4xf32>, !tosa.shape<3>) -> tensor<1x4x4xf32>
+// CHECK:           %{{.*}} = tosa.scatter %[[INPUT]], %{{.*}}, %[[UPDATES]] : (tensor<1x4x4xf32>, tensor<1x2xi32>, tensor<1x2x4xf32>) -> tensor<1x4x4xf32>
+func.func @torch.aten.index_put.hacked_twin$c_gt_1_update(%arg0: !torch.vtensor<[4,4],f32>, %arg1: !torch.vtensor<[2],si64>, %arg2: !torch.vtensor<[2,4],f32>) -> !torch.vtensor<[4,4],f32> {
+  %false = torch.constant.bool false
+  %0 = torch.prim.ListConstruct %arg1 : (!torch.vtensor<[2],si64>) -> !torch.list<vtensor>
+  %1 = torch.aten.index_put.hacked_twin %arg0, %0, %arg2, %false : !torch.vtensor<[4,4],f32>, !torch.list<vtensor>, !torch.vtensor<[2,4],f32>, !torch.bool -> !torch.vtensor<[4,4],f32>
+  return %1 : !torch.vtensor<[4,4],f32>
+}
+
+// -----
+
 // CHECK-LABEL:   func.func @torch.aten.slice_scatter$basic(
 // CHECK-SAME:                                              %[[VAL_0:.*]]: !torch.vtensor<[6,8],f32>,
 // CHECK-SAME:                                              %[[VAL_1:.*]]: !torch.vtensor<[6,1],f32>) -> !torch.vtensor<[6,8],f32> {
